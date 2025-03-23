@@ -86,9 +86,7 @@ def generate_invoice(order_details, invoice_number):
         )
         return data
     except json.JSONDecodeError:
-        cleaned_response = response.choices[0].message.content.strip().split("
-json")[-1].split("
-")[0]
+        cleaned_response = response.choices[0].message.content.strip().split("```json")[-1].split("```")[0]
         return json.loads(cleaned_response)
 
 # Create PDF with clearly structured layout
