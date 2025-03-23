@@ -16,7 +16,6 @@ openai.api_key = os.environ.get('API_KEY')
 app = Flask(__name__)
 
 # OPTIONAL: Increase max content size to 16 MB (or remove if not needed).
-# This helps if you expect very large text input.
 app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16 MB
 
 # Invoice number management starting from 2500
@@ -39,7 +38,6 @@ def clean_json_response(raw_response):
     Removes or replaces common problematic characters (zero-width spaces,
     smart quotes, code fences) so the string is valid JSON.
     """
-    # Strip outer whitespace
     cleaned = raw_response.strip()
     # Remove zero-width spaces
     cleaned = re.sub(r'[\u200B-\u200D\uFEFF]', '', cleaned)
@@ -47,14 +45,11 @@ def clean_json_response(raw_response):
     cleaned = cleaned.replace('“', '"').replace('”', '"')
     cleaned = cleaned.replace('‘', "'").replace('’', "'")
 
-    # If there are code fences like ```json ... ``` remove them
+    # Remove code fences if present
     if "```" in cleaned:
-        # Attempt to parse the section inside the ```json ... ```
         parts = cleaned.split("```json")
         if len(parts) > 1:
-            # Take everything after the first ```json
             chunk = parts[-1]
-            # Then stop at the next ```
             chunk = chunk.split("```")[0]
             cleaned = chunk.strip()
     
@@ -114,7 +109,6 @@ def generate_invoice(order_details, invoice_number):
         print("ERROR: JSON decoding failed.")
         print("Raw OpenAI response:", raw_content)
         print("Cleaned response:", cleaned_response)
-        # Raise the error or handle differently
         raise ValueError(f"Invalid JSON from OpenAI: {e}")
 
     # Build the dynamic delivery summary
@@ -128,7 +122,6 @@ def generate_invoice(order_details, invoice_number):
     )
     return data
 
-# Create PDF with clearly structured layout
 def create_pdf(data, invoice_number):
     pdf = FPDF()
     pdf.set_auto_page_break(auto=True, margin=15)
@@ -166,7 +159,7 @@ def create_pdf(data, invoice_number):
     pdf.set_font("Arial", size=9)
     start_y = pdf.get_y()
 
-    # Collect descriptions, then track height
+    # Collect descriptions
     descriptions = "\n".join(item['description'] for item in data['items'])
     pdf.multi_cell(120, 6, descriptions, border=1)
     cell_height = pdf.get_y() - start_y
@@ -178,6 +171,7 @@ def create_pdf(data, invoice_number):
 
     pdf.ln(5)
 
+    # Summaries
     for key, value in data['summary'].items():
         pdf.cell(120, 6, "", border=0)
         pdf.cell(35, 6, key, border=1, align='R')
@@ -197,19 +191,41 @@ def create_pdf(data, invoice_number):
 @app.route("/", methods=["GET", "POST"])
 def index():
     if request.method == "POST":
-        # 1) Get the raw input from the form
         orders_text = request.form["order_details"]
-        # 2) Remove zero-width spaces in user input
+
+        # 1) Clean the user input of zero-width spaces
         orders_text = re.sub(r'[\u200B-\u200D\uFEFF]', '', orders_text)
 
-        # 3) Split on the token "✅Name\s+:" if that's truly how your orders are separated
-        #    If you'd rather split by line, use re.split(r'[\r\n]+', orders_text)
-        orders = [order.strip() for order in re.split(r'✅Name\s+:', orders_text) if order.strip()]
+        # 2) Use a regex to find blocks of text from "Name:" to "Phone:" to next "Name:" or end
+        #    This pattern:
+        #    - Looks for "Name:\s*(...)\s*Phone:\s*(...)\s*"
+        #    - Then captures everything until the next "Name:" or the end.
+        pattern = re.compile(
+            r"Name:\s*(?P<name>.*?)\s*"
+            r"Phone:\s*(?P<phone>.*?)\s*"
+            r"(?P<details>(?:(?!Name:).)*)",  # anything until next "Name:" or EOF
+            re.DOTALL
+        )
 
+        matches = pattern.finditer(orders_text)
         results = []
-        for order in orders:
+
+        for match in matches:
+            # Extract the fields from each chunk
+            name_str = match.group("name").strip()
+            phone_str = match.group("phone").strip()
+            details_str = match.group("details").strip()
+
+            # Combine them into a single string for the AI prompt
+            # (You can adapt the format as needed.)
+            combined_order_text = (
+                f"Name: {name_str}\n"
+                f"Phone: {phone_str}\n"
+                f"{details_str}"
+            )
+
             invoice_number = get_next_invoice_number()
-            data = generate_invoice(order, invoice_number)
+            data = generate_invoice(combined_order_text, invoice_number)
             pdf_path = create_pdf(data, invoice_number)
             pdf_url = f"/invoices/{os.path.basename(pdf_path)}"
 
@@ -223,7 +239,6 @@ def index():
 
     return render_template("index.html")
 
-# Fixed PDF download route for your environment:
 @app.route('/invoices/<filename>')
 def download_invoice(filename):
     return send_from_directory(os.path.join(app.root_path, 'invoices'), filename)
