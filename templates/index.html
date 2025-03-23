@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8" />
+    <meta charset="UTF-8">
     <title>Dreamhaven Invoice Generator</title>
     <style>
         body {
@@ -29,6 +29,7 @@
         form {
             margin-bottom: 30px;
         }
+        /* Allow unlimited text and preserve line breaks visually */
         textarea {
             width: 100%;
             height: 200px;
@@ -39,6 +40,8 @@
             resize: vertical;
             background-color: #333;
             color: #eee;
+            white-space: pre-wrap; /* preserve line breaks and wrap text */
+            overflow-wrap: break-word; /* wrap long lines */
         }
         button {
             background-color: #4a90e2;
@@ -69,6 +72,8 @@
             background-color: #3a3a3a;
             border: 1px solid #4a4a4a;
             color: #eee;
+            white-space: pre-wrap;
+            overflow-wrap: break-word;
         }
         .copy-btn {
             background-color: #5cb85c;
@@ -97,7 +102,9 @@
     <p class="red-note">LEAVE HAYDER ALONE</p>
 
     <form method="POST">
-        <textarea name="order_details" placeholder="Paste one or multiple orders here..."></textarea><br><br>
+        <textarea 
+            name="order_details" 
+            placeholder="Paste one or multiple orders here..."></textarea><br><br>
         <button type="submit">Generate Invoice(s)</button>
     </form>
 
@@ -123,6 +130,8 @@
     <script>
         function copyToClipboard(id) {
             const textarea = document.getElementById(id);
+            // Remove leading/trailing whitespace for better copying
+            textarea.value = textarea.value.trim();
             textarea.select();
             document.execCommand('copy');
             alert('Delivery summary copied to clipboard!');
