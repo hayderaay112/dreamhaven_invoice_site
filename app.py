@@ -6,6 +6,10 @@ import openai
 from fpdf import FPDF
 from datetime import datetime
 
+# Ensure invoices folder exists
+if not os.path.exists("invoices"):
+    os.makedirs("invoices")
+
 openai.api_key = os.getenv("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")
 app = Flask(__name__)
 
