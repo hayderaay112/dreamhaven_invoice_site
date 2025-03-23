@@ -10,18 +10,24 @@ from datetime import datetime
 if not os.path.exists("invoices"):
     os.makedirs("invoices")
 
-openai.api_key = os.getenv("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")
+# Set your OpenAI API key explicitly
+openai.api_key = "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"
+
 app = Flask(__name__)
 
 # Invoice number management starting from 2500
 def get_next_invoice_number():
-    try:
-        with open("invoice_number.txt", "r") as f:
-            invoice_number = int(f.read()) + 1
-    except:
-        invoice_number = 2500
-    with open("invoice_number.txt", "w") as f:
+    invoice_file = "invoice_number.txt"
+    if not os.path.exists(invoice_file):
+        with open(invoice_file, "w") as f:
+            f.write("2500")  # Start at 2500 if file does not exist
+
+    with open(invoice_file, "r") as f:
+        invoice_number = int(f.read().strip()) + 1
+
+    with open(invoice_file, "w") as f:
         f.write(str(invoice_number))
+
     return invoice_number
 
 # Generate structured invoice and delivery summary
@@ -144,33 +150,3 @@ def create_pdf(data, invoice_number):
     filename = f"invoices/Invoice_{invoice_number}.pdf"
     pdf.output(filename)
     return filename
-
-@app.route("/", methods=["GET", "POST"])
-def index():
-    if request.method == "POST":
-        orders_text = request.form["order_details"]
-        orders = [order.strip() for order in re.split(r'✅Name\s+:', orders_text) if order.strip()]
-
-        results = []
-        for order in orders:
-            invoice_number = get_next_invoice_number()
-            data = generate_invoice(order, invoice_number)
-            pdf_path = create_pdf(data, invoice_number)
-            pdf_url = f"/invoices/{os.path.basename(pdf_path)}"
-
-            results.append({
-                "invoice_number": invoice_number,
-                "pdf_url": pdf_url,
-                "delivery_summary": data['delivery_summary']
-            })
-
-        return render_template("index.html", results=results)
-
-    return render_template("index.html")
-
-@app.route('/invoices/<filename>')
-def download_invoice(filename):
-    return send_from_directory('invoices', filename)
-
-if __name__ == "__main__":
-    app.run(debug=True)
