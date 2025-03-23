@@ -29,10 +29,10 @@
         form {
             margin-bottom: 30px;
         }
-        /* Allow unlimited text and preserve line breaks visually */
+        /* Allow multiline text and preserve line breaks visually */
         textarea {
             width: 100%;
-            height: 200px;
+            height: 250px;
             padding: 15px;
             border: 2px solid #555;
             border-radius: 6px;
@@ -79,6 +79,9 @@
             background-color: #5cb85c;
             font-size: 13px;
             padding: 6px 12px;
+            border: none;
+            cursor: pointer;
+            border-radius: 6px;
         }
         .copy-btn:hover {
             background-color: #4cae4c;
@@ -118,8 +121,9 @@
 
                 <strong>Delivery Summary:</strong><br>
                 <textarea readonly id="summary-{{ loop.index }}">
-                    {{ result.delivery_summary }}
-                </textarea><br>
+{{ result.delivery_summary }}
+                </textarea>
+                <br>
                 <button class="copy-btn" onclick="copyToClipboard('summary-{{ loop.index }}')">
                     Copy Delivery Summary 📋
                 </button>
@@ -130,10 +134,17 @@
     <script>
         function copyToClipboard(id) {
             const textarea = document.getElementById(id);
-            // Remove leading/trailing whitespace for better copying
-            textarea.value = textarea.value.trim();
-            textarea.select();
+            // Trim whitespace around the delivery summary
+            const textToCopy = textarea.value.trim();
+
+            // Create a temporary textarea to handle the copy
+            const temp = document.createElement('textarea');
+            temp.value = textToCopy;
+            document.body.appendChild(temp);
+            temp.select();
             document.execCommand('copy');
+            document.body.removeChild(temp);
+
             alert('Delivery summary copied to clipboard!');
         }
     </script>
