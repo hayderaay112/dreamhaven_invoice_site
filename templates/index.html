@@ -1,23 +1,30 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta charset="UTF-8" />
     <title>Dreamhaven Invoice Generator</title>
     <style>
         body {
             font-family: 'Segoe UI', Arial, sans-serif;
-            background-color: #f8f9fa;
-            color: #333;
+            background-color: #1e1e1e;
+            color: #eee;
             max-width: 900px;
             margin: 30px auto;
             padding: 20px;
-            box-shadow: 0 3px 10px rgba(0,0,0,0.1);
+            box-shadow: 0 3px 10px rgba(255,255,255,0.1);
             border-radius: 8px;
         }
         h2 {
             text-align: center;
             color: #4a90e2;
+            margin-bottom: 5px;
+        }
+        /* Red note under the title */
+        p.red-note {
+            text-align: center;
+            color: red;
+            font-weight: bold;
+            margin-bottom: 20px;
         }
         form {
             margin-bottom: 30px;
@@ -26,14 +33,16 @@
             width: 100%;
             height: 200px;
             padding: 15px;
-            border: 2px solid #ddd;
+            border: 2px solid #555;
             border-radius: 6px;
             font-size: 14px;
             resize: vertical;
+            background-color: #333;
+            color: #eee;
         }
         button {
             background-color: #4a90e2;
-            color: white;
+            color: #fff;
             border: none;
             padding: 10px 20px;
             cursor: pointer;
@@ -44,10 +53,10 @@
             background-color: #3b7dc4;
         }
         .order-result {
-            background-color: #ffffff;
+            background-color: #2c2c2c;
             padding: 15px;
             border-radius: 6px;
-            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+            box-shadow: 0 2px 5px rgba(255,255,255,0.1);
             margin-bottom: 20px;
         }
         .order-result h3 {
@@ -57,8 +66,9 @@
             height: 120px;
             margin-bottom: 10px;
             font-size: 13px;
-            background-color: #f4f8fc;
-            border: 1px solid #c9e1f9;
+            background-color: #3a3a3a;
+            border: 1px solid #4a4a4a;
+            color: #eee;
         }
         .copy-btn {
             background-color: #5cb85c;
@@ -72,7 +82,7 @@
             display: inline-block;
             padding: 6px 12px;
             background-color: #f39c12;
-            color: white;
+            color: #fff;
             text-decoration: none;
             border-radius: 6px;
             font-size: 13px;
@@ -84,6 +94,7 @@
 </head>
 <body>
     <h2>Dreamhaven Invoice Generator</h2>
+    <p class="red-note">LEAVE HAYDER ALONE</p>
 
     <form method="POST">
         <textarea name="order_details" placeholder="Paste one or multiple orders here..."></textarea><br><br>
@@ -94,11 +105,17 @@
         {% for result in results %}
             <div class="order-result">
                 <h3>Invoice #{{ result.invoice_number }}</h3>
-                <a href="{{ result.pdf_url }}" target="_blank" class="download-btn">📄 Download Invoice PDF</a><br><br>
+                <a href="{{ result.pdf_url }}" target="_blank" class="download-btn">
+                    📄 Download Invoice PDF
+                </a><br><br>
 
                 <strong>Delivery Summary:</strong><br>
-                <textarea readonly id="summary-{{ loop.index }}">{{ result.delivery_summary }}</textarea><br>
-                <button class="copy-btn" onclick="copyToClipboard('summary-{{ loop.index }}')">Copy Delivery Summary 📋</button>
+                <textarea readonly id="summary-{{ loop.index }}">
+                    {{ result.delivery_summary }}
+                </textarea><br>
+                <button class="copy-btn" onclick="copyToClipboard('summary-{{ loop.index }}')">
+                    Copy Delivery Summary 📋
+                </button>
             </div>
         {% endfor %}
     {% endif %}
