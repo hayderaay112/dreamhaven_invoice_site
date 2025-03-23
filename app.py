@@ -11,7 +11,7 @@ if not os.path.exists("invoices"):
     os.makedirs("invoices")
 
 # Set your OpenAI API key explicitly
-openai.api_key = "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"
+openai.api_key = os.getenv("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")
 
 app = Flask(__name__)
 
