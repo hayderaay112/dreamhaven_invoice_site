@@ -7,10 +7,9 @@ from fpdf import FPDF
 from datetime import datetime
 
 # Ensure invoices folder exists
-if not os.path.exists("invoices"):
-    os.makedirs("invoices")
+os.makedirs("invoices", exist_ok=True)
 
-openai.organization = os.environ.get('ORGANIZATION') 
+openai.organization = os.environ.get('ORGANIZATION')
 openai.api_key = os.environ.get('API_KEY')
 
 app = Flask(__name__)
@@ -20,7 +19,7 @@ def get_next_invoice_number():
     invoice_file = "invoice_number.txt"
     if not os.path.exists(invoice_file):
         with open(invoice_file, "w") as f:
-            f.write("2500")  # Start at 2500 if file does not exist
+            f.write("2500")
 
     with open(invoice_file, "r") as f:
         invoice_number = int(f.read().strip()) + 1
@@ -41,16 +40,8 @@ def generate_invoice(order_details, invoice_number):
     {{
         "bill_to": "Customer address and contact number ONLY (no names)",
         "items": [
-            {{
-                "description": "Actual item details clearly stated, including color",
-                "unit_price": price,
-                "amount": price
-            }},
-            {{
-                "description": "Additional actual item details, clearly stated including color",
-                "unit_price": 0.0,
-                "amount": 0.0
-            }}
+            {{"description": "Actual item details clearly stated, including color", "unit_price": price, "amount": price}},
+            {{"description": "Additional actual item details, clearly stated including color", "unit_price": 0.0, "amount": 0.0}}
         ],
         "summary": {{
             "Subtotal": amount,
@@ -71,30 +62,28 @@ def generate_invoice(order_details, invoice_number):
     response = openai.ChatCompletion.create(
         model="gpt-3.5-turbo",
         messages=[{"role": "user", "content": prompt}],
-        temperature=0.1
+        temperature=0.0,
+        max_tokens=500
     )
 
-    try:
-        data = json.loads(response.choices[0].message.content.strip())
-        item_descriptions = ', '.join(item['description'] for item in data['items'])
-        data['delivery_summary'] = (
-            f"Delivery 🚚 {invoice_number}\n\n"
-            f"{item_descriptions}\n\n"
-            f"Address: {data['bill_to']}\n\n"
-            f"Contact: {data['bill_to'].split()[-1]}\n\n"
-            f"Total: ${data['summary']['Total']:.2f}"
-        )
-        return data
-    except json.JSONDecodeError:
-        cleaned_response = response.choices[0].message.content.strip().split("```json")[-1].split("```")[0]
-        return json.loads(cleaned_response)
+    data = json.loads(response.choices[0].message.content.strip())
+    item_descriptions = ', '.join(item['description'] for item in data['items'])
+    data['delivery_summary'] = (
+        f"Delivery 🚚 {invoice_number}\n\n"
+        f"{item_descriptions}\n\n"
+        f"Address: {data['bill_to']}\n"
+        f"Contact: {data['bill_to'].split()[-1]}\n\n"
+        f"Total: ${data['summary']['Total']:.2f}"
+    )
+    return data
 
-# Create PDF with clearly structured layout
+# Create PDF with improved layout and structure
 def create_pdf(data, invoice_number):
     pdf = FPDF()
     pdf.set_auto_page_break(auto=True, margin=15)
     pdf.add_page()
 
+    # Header
     pdf.set_font("Arial", 'B', 12)
     pdf.cell(190, 8, "DREAMHAVEN BEDDING & FURNITURE", ln=True, align='C')
     pdf.set_font("Arial", '', 9)
@@ -105,10 +94,9 @@ def create_pdf(data, invoice_number):
 
     date_str = datetime.now().strftime("%b %d, %Y")
     pdf.set_font("Arial", 'B', 10)
-    pdf.cell(95, 6, f"Invoice #: {invoice_number}", border=0)
-    pdf.cell(95, 6, f"Date: {date_str}", border=0, align='R', ln=True)
-    pdf.cell(95, 6, "")
-    pdf.cell(95, 6, f"Due Date: {date_str}", border=0, align='R', ln=True)
+    pdf.cell(95, 6, f"Invoice #: {invoice_number}")
+    pdf.cell(95, 6, f"Date: {date_str}", align='R', ln=True)
+    pdf.cell(190, 6, f"Due Date: {date_str}", align='R', ln=True)
 
     pdf.ln(8)
 
@@ -120,23 +108,15 @@ def create_pdf(data, invoice_number):
     pdf.ln(5)
 
     pdf.set_font("Arial", 'B', 9)
-    pdf.cell(120, 6, "Item Description", border=1)
-    pdf.cell(35, 6, "Unit Price", border=1, align='R')
-    pdf.cell(35, 6, "Amount", border=1, align='R', ln=True)
-
-    pdf.set_font("Arial", size=9)
-    start_y = pdf.get_y()
-    descriptions = "\n".join(item['description'] for item in data['items'])
-    pdf.multi_cell(120, 6, descriptions, border=1)
-    cell_height = pdf.get_y() - start_y
-    pdf.set_xy(130, start_y)
-    pdf.cell(35, cell_height, f"${data['summary']['Subtotal']:.2f}", border=1, align='R')
-    pdf.cell(35, cell_height, f"${data['summary']['Subtotal']:.2f}", border=1, align='R', ln=True)
+    pdf.cell(190, 7, "Item Descriptions", border=1, ln=True, align='C')
+    pdf.set_font("Arial", '', 9)
+    items_str = "\n".join(item['description'] for item in data['items'])
+    pdf.multi_cell(190, 6, items_str, border=1)
 
     pdf.ln(5)
 
     for key, value in data['summary'].items():
-        pdf.cell(120, 6, "", border=0)
+        pdf.cell(120, 6, "")
         pdf.cell(35, 6, key, border=1, align='R')
         pdf.cell(35, 6, f"${value:.2f}", border=1, align='R', ln=True)
 
@@ -154,19 +134,17 @@ def create_pdf(data, invoice_number):
 @app.route("/", methods=["GET", "POST"])
 def index():
     if request.method == "POST":
-        orders_text = request.form["order_details"]
-        orders = [order.strip() for order in re.split(r'✅Name\s+:', orders_text) if order.strip()]
+        orders = re.split(r'✅Name\s+:', request.form["order_details"])
+        orders = [order.strip() for order in orders if order.strip()]
 
         results = []
         for order in orders:
             invoice_number = get_next_invoice_number()
             data = generate_invoice(order, invoice_number)
             pdf_path = create_pdf(data, invoice_number)
-            pdf_url = f"/invoices/{os.path.basename(pdf_path)}"
-
             results.append({
                 "invoice_number": invoice_number,
-                "pdf_url": pdf_url,
+                "pdf_url": f"/invoices/{os.path.basename(pdf_path)}",
                 "delivery_summary": data['delivery_summary']
             })
 
@@ -174,7 +152,6 @@ def index():
 
     return render_template("index.html")
 
-# Fixed PDF download route clearly for Render:
 @app.route('/invoices/<filename>')
 def download_invoice(filename):
     return send_from_directory(os.path.join(app.root_path, 'invoices'), filename)
