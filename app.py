@@ -15,6 +15,10 @@ openai.api_key = os.environ.get('API_KEY')
 
 app = Flask(__name__)
 
+# OPTIONAL: Increase max content size to 16 MB (or remove if not needed).
+# This helps if you expect very large text input.
+app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16 MB
+
 # Invoice number management starting from 2500
 def get_next_invoice_number():
     invoice_file = "invoice_number.txt"
@@ -30,6 +34,32 @@ def get_next_invoice_number():
 
     return invoice_number
 
+def clean_json_response(raw_response):
+    """
+    Removes or replaces common problematic characters (zero-width spaces,
+    smart quotes, code fences) so the string is valid JSON.
+    """
+    # Strip outer whitespace
+    cleaned = raw_response.strip()
+    # Remove zero-width spaces
+    cleaned = re.sub(r'[\u200B-\u200D\uFEFF]', '', cleaned)
+    # Replace fancy quotes with standard quotes
+    cleaned = cleaned.replace('“', '"').replace('”', '"')
+    cleaned = cleaned.replace('‘', "'").replace('’', "'")
+
+    # If there are code fences like ```json ... ``` remove them
+    if "```" in cleaned:
+        # Attempt to parse the section inside the ```json ... ```
+        parts = cleaned.split("```json")
+        if len(parts) > 1:
+            # Take everything after the first ```json
+            chunk = parts[-1]
+            # Then stop at the next ```
+            chunk = chunk.split("```")[0]
+            cleaned = chunk.strip()
+    
+    return cleaned
+
 # Generate structured invoice and delivery summary
 def generate_invoice(order_details, invoice_number):
     prompt = f"""
@@ -43,8 +73,8 @@ def generate_invoice(order_details, invoice_number):
         "items": [
             {{
                 "description": "Actual item details clearly stated, including color",
-                "unit_price": price,
-                "amount": price
+                "unit_price": 0.0,
+                "amount": 0.0
             }},
             {{
                 "description": "Additional actual item details, clearly stated including color",
@@ -53,10 +83,10 @@ def generate_invoice(order_details, invoice_number):
             }}
         ],
         "summary": {{
-            "Subtotal": amount,
-            "Tax (8.25%)": amount,
+            "Subtotal": 0.0,
+            "Tax (8.25%)": 0.0,
             "Shipping": 69.00,
-            "Total": amount
+            "Total": 0.0
         }},
         "terms": "All sales are final; no refunds. Special orders are not subject to cancellation. "
                  "A 30% restocking fee applies for seller-approved exchanges, cancellations, or returns. "
@@ -74,20 +104,29 @@ def generate_invoice(order_details, invoice_number):
         temperature=0.1
     )
 
+    raw_content = response.choices[0].message.content
+    cleaned_response = clean_json_response(raw_content)
+
+    # Attempt JSON parsing with fallback
     try:
-        data = json.loads(response.choices[0].message.content.strip())
-        item_descriptions = ', '.join(item['description'] for item in data['items'])
-        data['delivery_summary'] = (
-            f"Delivery 🚚 {invoice_number}\n\n"
-            f"{item_descriptions}\n\n"
-            f"Address: {data['bill_to']}\n\n"
-            f"Contact: {data['bill_to'].split()[-1]}\n\n"
-            f"Total: ${data['summary']['Total']:.2f}"
-        )
-        return data
-    except json.JSONDecodeError:
-        cleaned_response = response.choices[0].message.content.strip().split("```json")[-1].split("```")[0]
-        return json.loads(cleaned_response)
+        data = json.loads(cleaned_response)
+    except json.JSONDecodeError as e:
+        print("ERROR: JSON decoding failed.")
+        print("Raw OpenAI response:", raw_content)
+        print("Cleaned response:", cleaned_response)
+        # Raise the error or handle differently
+        raise ValueError(f"Invalid JSON from OpenAI: {e}")
+
+    # Build the dynamic delivery summary
+    item_descriptions = ', '.join(item['description'] for item in data['items'])
+    data['delivery_summary'] = (
+        f"Delivery 🚚 {invoice_number}\n\n"
+        f"{item_descriptions}\n\n"
+        f"Address: {data['bill_to']}\n\n"
+        f"Contact: {data['bill_to'].split()[-1]}\n\n"
+        f"Total: ${data['summary']['Total']:.2f}"
+    )
+    return data
 
 # Create PDF with clearly structured layout
 def create_pdf(data, invoice_number):
@@ -126,9 +165,13 @@ def create_pdf(data, invoice_number):
 
     pdf.set_font("Arial", size=9)
     start_y = pdf.get_y()
+
+    # Collect descriptions, then track height
     descriptions = "\n".join(item['description'] for item in data['items'])
     pdf.multi_cell(120, 6, descriptions, border=1)
     cell_height = pdf.get_y() - start_y
+
+    # Move back up to fill the other columns
     pdf.set_xy(130, start_y)
     pdf.cell(35, cell_height, f"${data['summary']['Subtotal']:.2f}", border=1, align='R')
     pdf.cell(35, cell_height, f"${data['summary']['Subtotal']:.2f}", border=1, align='R', ln=True)
@@ -154,7 +197,13 @@ def create_pdf(data, invoice_number):
 @app.route("/", methods=["GET", "POST"])
 def index():
     if request.method == "POST":
+        # 1) Get the raw input from the form
         orders_text = request.form["order_details"]
+        # 2) Remove zero-width spaces in user input
+        orders_text = re.sub(r'[\u200B-\u200D\uFEFF]', '', orders_text)
+
+        # 3) Split on the token "✅Name\s+:" if that's truly how your orders are separated
+        #    If you'd rather split by line, use re.split(r'[\r\n]+', orders_text)
         orders = [order.strip() for order in re.split(r'✅Name\s+:', orders_text) if order.strip()]
 
         results = []
@@ -174,7 +223,7 @@ def index():
 
     return render_template("index.html")
 
-# Fixed PDF download route clearly for Render:
+# Fixed PDF download route for your environment:
 @app.route('/invoices/<filename>')
 def download_invoice(filename):
     return send_from_directory(os.path.join(app.root_path, 'invoices'), filename)
