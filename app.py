@@ -10,8 +10,8 @@ from datetime import datetime
 if not os.path.exists("invoices"):
     os.makedirs("invoices")
 
-# Corrected API key setup (securely fetching from environment)
-openai.api_key = "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"
+openai.organization = os.environ.get('ORGANIZATION') 
+openai.api_key = os.environ.get('API_KEY')
 
 app = Flask(__name__)
 
