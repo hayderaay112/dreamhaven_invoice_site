@@ -150,3 +150,34 @@ def create_pdf(data, invoice_number):
     filename = f"invoices/Invoice_{invoice_number}.pdf"
     pdf.output(filename)
     return filename
+
+@app.route("/", methods=["GET", "POST"])
+def index():
+    if request.method == "POST":
+        orders_text = request.form["order_details"]
+        orders = [order.strip() for order in re.split(r'✅Name\s+:', orders_text) if order.strip()]
+
+        results = []
+        for order in orders:
+            invoice_number = get_next_invoice_number()
+            data = generate_invoice(order, invoice_number)
+            pdf_path = create_pdf(data, invoice_number)
+            pdf_url = f"/invoices/{os.path.basename(pdf_path)}"
+
+            results.append({
+                "invoice_number": invoice_number,
+                "pdf_url": pdf_url,
+                "delivery_summary": data['delivery_summary']
+            })
+
+        return render_template("index.html", results=results)
+
+    return render_template("index.html")
+
+# Fixed PDF download route clearly for Render:
+@app.route('/invoices/<filename>')
+def download_invoice(filename):
+    return send_from_directory(os.path.join(app.root_path, 'invoices'), filename)
+
+if __name__ == "__main__":
+    app.run(debug=True)
